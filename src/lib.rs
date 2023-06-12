@@ -434,6 +434,14 @@ pub struct SpHeader {
     pub data_len: u16,
 }
 
+/// Error type for the SpHeader constructor functions
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum SpHeaderError {
+    ApidTooLarge(u16),
+    SeqCountTooLarge(u16),
+}
+
 impl Default for SpHeader {
     /// The default function sets the sequence flag field to [SequenceFlags::Unsegmented]. The data
     /// length field is set to 1, which denotes an empty space packets.
@@ -469,19 +477,19 @@ impl SpHeader {
         seq_flags: SequenceFlags,
         seq_count: u16,
         data_len: u16,
-    ) -> Self {
+    ) -> Result<Self, SpHeaderError> {
         if seq_count > MAX_SEQ_COUNT {
-            panic!("Sequence count is too large");
+            return Err(SpHeaderError::SeqCountTooLarge(seq_count));
         }
         if apid > MAX_APID {
-            panic!("APID is too large");
+            return Err(SpHeaderError::ApidTooLarge(apid));
         }
-        Self {
+        Ok(Self {
             psc: PacketSequenceCtrl::const_new(seq_flags, seq_count),
             packet_id: PacketId::const_new(ptype, sec_header, apid),
             data_len,
             version: 0,
-        }
+        })
     }
 
     /// Create a new Space Packet Header instance which can be used to create generic
@@ -495,12 +503,12 @@ impl SpHeader {
         seq_count: u16,
         data_len: u16,
     ) -> Option<Self> {
-        if seq_count > MAX_SEQ_COUNT || apid > MAX_APID {
-            return None;
-        }
-        Some(SpHeader::const_new_from_single_fields(
+        match Self::const_new_from_single_fields(
             ptype, sec_header, apid, seq_flags, seq_count, data_len,
-        ))
+        ) {
+            Ok(header) => Some(header),
+            Err(_) => None,
+        }
     }
 
     /// Helper function for telemetry space packet headers. The packet type field will be
